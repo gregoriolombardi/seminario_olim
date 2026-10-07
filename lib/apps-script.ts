@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { RespostaInscricao, Vaga } from "./tipos";
+import type { InscricaoExistente, RespostaInscricao, Vaga } from "./tipos";
 import { workshops } from "./workshops";
 
 const URL_SCRIPT = process.env.APPS_SCRIPT_URL;
@@ -36,6 +36,19 @@ export async function buscarVagas(): Promise<Vaga[]> {
 
   guardar(dados.vagas);
   return dados.vagas;
+}
+
+export async function buscarInscricao(email: string): Promise<InscricaoExistente | null> {
+  if (SIMULAR) return simulacao.buscarInscricao(email);
+
+  const url = new URL(urlScript());
+  url.searchParams.set("email", email);
+  url.searchParams.set("token", TOKEN ?? "");
+  const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(10_000) });
+  if (!res.ok) throw new Error(`Apps Script respondeu ${res.status}`);
+  const dados = (await res.json()) as { ok: boolean; inscricao?: InscricaoExistente | null; codigo?: string };
+  if (!dados.ok) throw new Error(`Apps Script recusou a consulta: ${dados.codigo}`);
+  return dados.inscricao ?? null;
 }
 
 export async function inscrever(entrada: {
@@ -99,5 +112,10 @@ const simulacao = (() => {
     return { ok: true, vagas: vagas() };
   }
 
-  return { vagas, inscrever };
+  function buscarInscricao(email: string): InscricaoExistente | null {
+    const existente = inscricoes.find((i) => i.email === email);
+    return existente ? { workshopId: existente.workshopId } : null;
+  }
+
+  return { vagas, inscrever, buscarInscricao };
 })();

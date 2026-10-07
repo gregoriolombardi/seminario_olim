@@ -11,14 +11,36 @@ type Envio =
   | { estado: "ocioso" }
   | { estado: "enviando" }
   | { estado: "erro"; mensagem: string }
-  | { estado: "sucesso"; workshopId: string; nome: string };
+  | { estado: "sucesso"; workshopId: string; nome: string }
+  // O e-mail do convite já tinha inscrição quando a página abriu.
+  | { estado: "ja-inscrito"; workshopId: string };
 
-export default function Inscricao({ initialVagas }: { initialVagas: Vaga[] | null }) {
+type Props = {
+  initialVagas: Vaga[] | null;
+  // Vindos do link de convite. O e-mail do link fica travado para não ser digitado errado.
+  nomeInicial?: string;
+  emailInicial?: string;
+  jaInscritoEm?: string;
+  // Fallback do Suspense: trava a interação até o e-mail do link e as vagas chegarem,
+  // senão o que a pessoa digitar se perde quando o componente definitivo entra.
+  carregando?: boolean;
+};
+
+export default function Inscricao({
+  initialVagas,
+  nomeInicial = "",
+  emailInicial = "",
+  jaInscritoEm,
+  carregando = false,
+}: Props) {
   const [vagas, setVagas] = useState(initialVagas);
-  const [selecionado, setSelecionado] = useState<string | null>(null);
-  const [nome, setNome] = useState("");
-  const [email, setEmail] = useState("");
-  const [envio, setEnvio] = useState<Envio>({ estado: "ocioso" });
+  const [selecionado, setSelecionado] = useState<string | null>(jaInscritoEm ?? null);
+  const [nome, setNome] = useState(nomeInicial);
+  const [email, setEmail] = useState(emailInicial);
+  const emailTravado = emailInicial !== "";
+  const [envio, setEnvio] = useState<Envio>(
+    jaInscritoEm ? { estado: "ja-inscrito", workshopId: jaInscritoEm } : { estado: "ocioso" },
+  );
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
@@ -35,6 +57,7 @@ export default function Inscricao({ initialVagas }: { initialVagas: Vaga[] | nul
       }
     }
 
+    if (carregando) return;
     if (!initialVagas) atualizar();
     const id = setInterval(atualizar, INTERVALO_MS);
     document.addEventListener("visibilitychange", atualizar);
@@ -43,12 +66,12 @@ export default function Inscricao({ initialVagas }: { initialVagas: Vaga[] | nul
       clearInterval(id);
       document.removeEventListener("visibilitychange", atualizar);
     };
-  }, [initialVagas]);
+  }, [initialVagas, carregando]);
 
   const vagaDe = (id: string) => vagas?.find((v) => v.id === id);
   const escolhido = workshops.find((w) => w.id === selecionado);
   const escolhidoLotado = selecionado ? vagaDe(selecionado)?.lotado : false;
-  const confirmado = envio.estado === "sucesso";
+  const confirmado = envio.estado === "sucesso" || envio.estado === "ja-inscrito";
   const enviando = envio.estado === "enviando";
 
   function escolher(id: string) {
@@ -90,6 +113,23 @@ export default function Inscricao({ initialVagas }: { initialVagas: Vaga[] | nul
         <p className="mt-2 text-tinta/80">As vagas são limitadas e travam ao lotar — escolha logo a sua.</p>
       </header>
 
+      {envio.estado === "ja-inscrito" && (
+        <div
+          role="status"
+          className="sobe mb-8 rounded-3xl border border-roxo bg-roxo-900 p-6 text-branco shadow-[0_18px_50px_-30px_rgba(46,31,77,0.6)] sm:p-8"
+        >
+          <p className="eyebrow text-roxo-300">Inscrição já garantida</p>
+          <h3 className="font-display mt-1 text-2xl font-semibold">
+            {nomeInicial ? `Olá, ${nomeInicial.split(" ")[0]}!` : "Olá!"}
+          </h3>
+          <p className="mt-3 max-w-2xl text-branco/80">
+            O e-mail <strong className="text-branco">{emailInicial}</strong> já tem lugar garantido no workshop{" "}
+            <strong className="text-branco">{workshops.find((w) => w.id === envio.workshopId)?.titulo}</strong>. Cada pessoa
+            participa de um workshop só. Nos vemos em 07 de novembro, no Auditório do CEJAS.
+          </p>
+        </div>
+      )}
+
       <ul className="grid gap-4 sm:grid-cols-2">
         {workshops.map((w, i) => {
           const vaga = vagaDe(w.id);
@@ -103,7 +143,7 @@ export default function Inscricao({ initialVagas }: { initialVagas: Vaga[] | nul
               <button
                 type="button"
                 aria-pressed={ativo}
-                disabled={lotado || confirmado}
+                disabled={carregando || lotado || confirmado}
                 onClick={() => escolher(w.id)}
                 className={[
                   "group relative flex h-full w-full flex-col rounded-3xl border p-5 text-left transition",
@@ -112,7 +152,7 @@ export default function Inscricao({ initialVagas }: { initialVagas: Vaga[] | nul
                     : "border-roxo-200 bg-branco",
                   lotado
                     ? "cursor-not-allowed opacity-60"
-                    : confirmado
+                    : confirmado || carregando
                       ? "cursor-default"
                       : "cursor-pointer hover:-translate-y-0.5 hover:shadow-[0_18px_40px_-26px_rgba(46,31,77,0.55)]",
                 ].join(" ")}
@@ -157,7 +197,7 @@ export default function Inscricao({ initialVagas }: { initialVagas: Vaga[] | nul
         })}
       </ul>
 
-      {confirmado ? (
+      {envio.estado === "ja-inscrito" ? null : envio.estado === "sucesso" ? (
         <div
           role="status"
           className="sobe mt-10 rounded-3xl border border-roxo bg-roxo-900 p-6 text-branco shadow-[0_18px_50px_-30px_rgba(46,31,77,0.6)] sm:p-8"
@@ -192,13 +232,16 @@ export default function Inscricao({ initialVagas }: { initialVagas: Vaga[] | nul
                 maxLength={120}
                 placeholder="Seu nome"
                 autoComplete="name"
+                disabled={carregando}
                 value={nome}
                 onChange={(e) => setNome(e.target.value)}
                 className="w-full rounded-xl border border-roxo-200 bg-papel px-4 py-3 text-tinta outline-none transition focus:border-roxo focus:ring-2 focus:ring-roxo/25"
               />
             </label>
             <label className="block">
-              <span className="mb-1.5 block text-sm font-semibold text-tinta">E-mail (o mesmo da inscrição no Sympla)</span>
+              <span className="mb-1.5 block text-sm font-semibold text-tinta">
+                {emailTravado ? "E-mail do seu convite" : "E-mail (o mesmo da inscrição no Sympla)"}
+              </span>
               <input
                 type="email"
                 name="email"
@@ -206,10 +249,23 @@ export default function Inscricao({ initialVagas }: { initialVagas: Vaga[] | nul
                 maxLength={254}
                 placeholder="voce@email.com"
                 autoComplete="email"
+                disabled={carregando}
+                readOnly={emailTravado}
+                aria-describedby={emailTravado ? "email-travado" : undefined}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-xl border border-roxo-200 bg-papel px-4 py-3 text-tinta outline-none transition focus:border-roxo focus:ring-2 focus:ring-roxo/25"
+                className={[
+                  "w-full rounded-xl border px-4 py-3 outline-none transition",
+                  emailTravado
+                    ? "cursor-not-allowed border-roxo-200 bg-lilas text-tinta/70"
+                    : "border-roxo-200 bg-papel text-tinta focus:border-roxo focus:ring-2 focus:ring-roxo/25",
+                ].join(" ")}
               />
+              {emailTravado && (
+                <span id="email-travado" className="mt-1.5 block text-xs text-tinta/60">
+                  Veio do seu convite e não pode ser alterado.
+                </span>
+              )}
             </label>
           </div>
 

@@ -16,7 +16,7 @@ navegador ──> /api/vagas, /api/inscricao (Next.js) ──> Apps Script ─�
 1. Crie uma planilha Google → **Extensões › Apps Script**.
 2. Cole o conteúdo de `apps-script/Code.gs` no editor e salve.
 3. Selecione a função `setup` e clique em **Executar** (autorize o acesso).
-   Ela cria as abas `Workshops`, `Inscricoes` e `Sympla`, os 5 workshops com seus limites
+   Ela cria as abas `Workshops`, `Inscricoes` e `Sympla` (email | nome | link), os 5 workshops com seus limites
    e um token. O token aparece no **Registro de execução**.
 4. **Implantar › Nova implantação** → tipo **App da Web**
    - Executar como: **eu**
@@ -31,6 +31,21 @@ para manter a mesma URL.
 Cole os e-mails dos inscritos no Sympla na coluna A da aba `Sympla` (a partir da linha 2).
 Com a aba preenchida, só esses e-mails conseguem se inscrever. Vazia, a validação fica desligada.
 
+## Links de convite
+
+`https://SEU-SITE/?email=fulano@escola.com&nome=Fulano%20de%20Tal` abre a página com nome e
+e-mail preenchidos. O **e-mail do link fica travado** (a pessoa não consegue digitar errado);
+o nome continua editável. E-mail inválido no link é ignorado e o campo fica livre.
+Ao abrir o link, o site consulta a planilha: se o e-mail já tem inscrição, mostra em qual
+workshop no lugar do formulário.
+
+Para gerar os links de todo mundo:
+
+1. Na aba `Sympla`, cole os e-mails na coluna A e os nomes na coluna B (a partir da linha 2).
+2. Recarregue a planilha → menu **Seminário › Gerar links de convite**.
+3. Na primeira vez ele pede a URL do site (fica salva em Propriedades do script › `SITE_URL`;
+   apague a propriedade para trocar). A coluna C recebe os links, já codificados para WhatsApp/e-mail.
+
 ## Rodar o site
 
 ```bash
@@ -44,5 +59,4 @@ Sem `APPS_SCRIPT_URL`, o `npm run dev` usa vagas simuladas em memória. Em produ
 ## Pendências de conteúdo
 
 - Descrição oficial do workshop ECA Digital (`lib/workshops.ts`).
-- Logo: salve como `public/logo-olim.png` (até lá aparece o nome em texto).
 - Contato no rodapé ("Dúvidas").

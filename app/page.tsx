@@ -1,28 +1,55 @@
-import { existsSync } from "node:fs";
-import path from "node:path";
 import Image from "next/image";
 import { connection } from "next/server";
 import { Suspense } from "react";
 
 import Inscricao from "@/components/inscricao";
-import { buscarVagas } from "@/lib/apps-script";
-import type { Vaga } from "@/lib/tipos";
+import { buscarInscricao, buscarVagas } from "@/lib/apps-script";
 
-const temLogo = existsSync(path.join(process.cwd(), "public", "logo-olim.png"));
-
-async function InscricaoComVagas() {
-  await connection();
-  let vagas: Vaga[] | null = null;
-  try {
-    vagas = await buscarVagas();
-  } catch (err) {
-    // O cliente tenta de novo sozinho; a página não deve cair por isso.
-    console.error("Falha ao buscar vagas:", err);
-  }
-  return <Inscricao initialVagas={vagas} />;
+// Link de convite: /?email=fulano@escola.com&nome=Fulano%20de%20Tal
+function emailDoLink(valor: string | string[] | undefined): string {
+  if (typeof valor !== "string") return "";
+  // "+" na URL vira espaço ao decodificar; e-mail não tem espaço, então devolve o "+".
+  const email = valor.trim().replace(/ /g, "+").toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254 ? email : "";
 }
 
-export default function Page() {
+function nomeDoLink(valor: string | string[] | undefined): string {
+  if (typeof valor !== "string") return "";
+  return valor.replace(/[\p{C}]/gu, "").replace(/\s+/g, " ").trim().slice(0, 120);
+}
+
+async function InscricaoComVagas({ searchParams }: { searchParams: PageProps<"/">["searchParams"] }) {
+  await connection();
+  const { email, nome } = await searchParams;
+  const emailInicial = emailDoLink(email);
+  const nomeInicial = nomeDoLink(nome);
+
+  // Falhas aqui não derrubam a página: o cliente busca as vagas de novo sozinho, e um
+  // e-mail repetido ainda é barrado pelo Apps Script na hora de confirmar.
+  const [vagas, inscricao] = await Promise.all([
+    buscarVagas().catch((err) => {
+      console.error("Falha ao buscar vagas:", err);
+      return null;
+    }),
+    emailInicial
+      ? buscarInscricao(emailInicial).catch((err) => {
+          console.error("Falha ao consultar inscrição:", err);
+          return null;
+        })
+      : null,
+  ]);
+
+  return (
+    <Inscricao
+      initialVagas={vagas}
+      nomeInicial={nomeInicial}
+      emailInicial={emailInicial}
+      jaInscritoEm={inscricao?.workshopId}
+    />
+  );
+}
+
+export default function Page({ searchParams }: PageProps<"/">) {
   return (
     <div className="relative min-h-dvh">
       <div className="barra-lateral fixed inset-y-0 left-0 z-20 w-2 sm:w-3" aria-hidden="true" />
@@ -33,11 +60,7 @@ export default function Page() {
 
         <div className="grao-conteudo mx-auto w-full max-w-5xl px-6 pb-14 pt-8 sm:pt-10">
           <div className="sobe flex items-center gap-3">
-            {temLogo ? (
-              <Image src="/logo-olim.png" alt="Olim" width={500} height={208} priority className="h-11 w-auto" />
-            ) : (
-              <span className="font-display text-3xl font-bold tracking-tight">olim</span>
-            )}
+            <Image src="/logo-olim.webp" alt="Olim" width={500} height={208} priority className="h-11 w-auto" />
             <span className="h-7 w-px bg-branco/30" />
             <span className="eyebrow text-roxo-300">II Seminário Internacional de Educação</span>
           </div>
@@ -82,8 +105,8 @@ export default function Page() {
       </header>
 
       <main className="pt-14">
-        <Suspense fallback={<Inscricao initialVagas={null} />}>
-          <InscricaoComVagas />
+        <Suspense fallback={<Inscricao initialVagas={null} carregando />}>
+          <InscricaoComVagas searchParams={searchParams} />
         </Suspense>
       </main>
 

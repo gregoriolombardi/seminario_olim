@@ -6,6 +6,8 @@ export type Vaga = {
   lotado: boolean;
 };
 
+export type InscricaoExistente = { workshopId: string };
+
 export type CodigoErro =
   | "REQUISICAO_INVALIDA"
   | "NAO_AUTORIZADO"

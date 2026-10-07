@@ -4,10 +4,12 @@
  * A planilha é a fonte da verdade:
  *   - Workshops:  id | titulo | limite
  *   - Inscricoes: data_hora | workshop_id | workshop | nome | email
- *   - Sympla:     email   (opcional — se tiver e-mails, só eles podem se inscrever)
+ *   - Sympla:     email | nome | link   (opcional — se tiver e-mails, só eles podem se inscrever;
+ *                 o link de convite é gerado pelo menu Seminário › Gerar links de convite)
  *
  * Endpoints (implantar como App da Web, "Executar como: eu", "Acesso: qualquer pessoa"):
  *   GET  .../exec              -> { ok, vagas: [{ id, limite, inscritos, restantes, lotado }] }
+ *   GET  .../exec?email=&token= -> { ok, inscricao: { workshopId } | null }
  *   POST .../exec  (JSON)      -> { token, workshopId, nome, email }
  *                                 { ok: true, vagas } | { ok: false, codigo, mensagem, vagas? }
  *
@@ -45,7 +47,7 @@ function setup() {
 
   var sympla = ss.getSheetByName(ABA_SYMPLA) || ss.insertSheet(ABA_SYMPLA);
   if (sympla.getLastRow() === 0) {
-    sympla.appendRow(['email']);
+    sympla.appendRow(['email', 'nome', 'link']);
     sympla.setFrozenRows(1);
   }
 
@@ -56,7 +58,62 @@ function setup() {
   Logger.log('TOKEN (coloque em APPS_SCRIPT_TOKEN no .env do site): ' + props.getProperty('TOKEN'));
 }
 
-function doGet() {
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('Seminário')
+    .addItem('Gerar links de convite', 'gerarLinks')
+    .addToUi();
+}
+
+/**
+ * Preenche a coluna "link" da aba Sympla com o link de convite de cada pessoa
+ * (e-mail travado e nome preenchido no formulário). Pede a URL do site na 1ª vez.
+ */
+function gerarLinks() {
+  var ui = SpreadsheetApp.getUi();
+  var props = PropertiesService.getScriptProperties();
+  var site = props.getProperty('SITE_URL');
+
+  if (!site) {
+    var resposta = ui.prompt('URL do site', 'Ex.: https://workshops.olim.com.br', ui.ButtonSet.OK_CANCEL);
+    if (resposta.getSelectedButton() !== ui.Button.OK) return;
+    site = resposta.getResponseText().trim().replace(/\/+$/, '');
+    if (!/^https?:\/\//.test(site)) {
+      ui.alert('A URL precisa começar com https://');
+      return;
+    }
+    props.setProperty('SITE_URL', site);
+  }
+
+  var aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ABA_SYMPLA);
+  var dados = linhas(ABA_SYMPLA);
+  if (dados.length === 0) {
+    ui.alert('Cole os e-mails (coluna A) e nomes (coluna B) na aba Sympla primeiro.');
+    return;
+  }
+
+  var links = dados.map(function (l) {
+    var email = String(l[0]).trim().toLowerCase();
+    var nome = String(l[1] || '').trim();
+    if (!email) return [''];
+    return [site + '/?email=' + encodeURIComponent(email) + (nome ? '&nome=' + encodeURIComponent(nome) : '')];
+  });
+  aba.getRange(2, 3, links.length, 1).setValues(links);
+
+  SpreadsheetApp.getActiveSpreadsheet().toast(links.filter(function (l) { return l[0]; }).length + ' links gerados.');
+}
+
+function doGet(e) {
+  var params = (e && e.parameter) || {};
+
+  if (params.email) {
+    // Diz em qual workshop o e-mail está — por isso exige o token, como o POST.
+    if (!tokenValido(params.token)) return json(erro('NAO_AUTORIZADO', 'Token inválido.'));
+    var email = String(params.email).trim().toLowerCase();
+    var existente = lerInscricoes().filter(function (i) { return i.email === email; })[0];
+    return json({ ok: true, inscricao: existente ? { workshopId: existente.workshopId } : null });
+  }
+
   return json({ ok: true, vagas: calcularVagas() });
 }
 
@@ -68,7 +125,7 @@ function doPost(e) {
     return json(erro('REQUISICAO_INVALIDA', 'Corpo da requisição inválido.'));
   }
 
-  if (!dados.token || dados.token !== PropertiesService.getScriptProperties().getProperty('TOKEN')) {
+  if (!tokenValido(dados.token)) {
     return json(erro('NAO_AUTORIZADO', 'Token inválido.'));
   }
 
@@ -112,6 +169,10 @@ function doPost(e) {
   } finally {
     lock.releaseLock();
   }
+}
+
+function tokenValido(token) {
+  return Boolean(token) && token === PropertiesService.getScriptProperties().getProperty('TOKEN');
 }
 
 function calcularVagas() {
