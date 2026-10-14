@@ -3,48 +3,35 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 
 import Inscricao from "@/components/inscricao";
-import { buscarInscricao, buscarVagas } from "@/lib/apps-script";
+import { buscarParticipante, buscarVagas } from "@/lib/apps-script";
 
-// Link de convite: /?email=fulano@escola.com&nome=Fulano%20de%20Tal
-function emailDoLink(valor: string | string[] | undefined): string {
-  if (typeof valor !== "string") return "";
-  // "+" na URL vira espaço ao decodificar; e-mail não tem espaço, então devolve o "+".
-  const email = valor.trim().replace(/ /g, "+").toLowerCase();
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254 ? email : "";
-}
-
-function nomeDoLink(valor: string | string[] | undefined): string {
-  if (typeof valor !== "string") return "";
-  return valor.replace(/[\p{C}]/gu, "").replace(/\s+/g, " ").trim().slice(0, 120);
-}
-
+// Link de convite: /?c=CODIGO_DO_INGRESSO. Nome e e-mail vêm da planilha.
 async function InscricaoComVagas({ searchParams }: { searchParams: PageProps<"/">["searchParams"] }) {
   await connection();
-  const { email, nome } = await searchParams;
-  const emailInicial = emailDoLink(email);
-  const nomeInicial = nomeDoLink(nome);
+  const { c } = await searchParams;
+  const codigo = typeof c === "string" ? c.trim().toUpperCase().slice(0, 40) : "";
 
-  // Falhas aqui não derrubam a página: o cliente busca as vagas de novo sozinho, e um
-  // e-mail repetido ainda é barrado pelo Apps Script na hora de confirmar.
-  const [vagas, inscricao] = await Promise.all([
+  // Falhas aqui não derrubam a página: o cliente busca as vagas de novo sozinho, e quem já
+  // escolheu ainda é barrado pelo Apps Script na hora de confirmar.
+  const [vagas, participante] = await Promise.all([
     buscarVagas().catch((err) => {
       console.error("Falha ao buscar vagas:", err);
       return null;
     }),
-    emailInicial
-      ? buscarInscricao(emailInicial).catch((err) => {
-          console.error("Falha ao consultar inscrição:", err);
-          return null;
+    codigo
+      ? buscarParticipante(codigo).catch((err) => {
+          // undefined = não deu para consultar; null = código não existe na lista.
+          console.error("Falha ao consultar participante:", err);
+          return undefined;
         })
-      : null,
+      : undefined,
   ]);
 
   return (
     <Inscricao
       initialVagas={vagas}
-      nomeInicial={nomeInicial}
-      emailInicial={emailInicial}
-      jaInscritoEm={inscricao?.workshopId}
+      convite={participante ?? undefined}
+      conviteInvalido={participante === null}
     />
   );
 }

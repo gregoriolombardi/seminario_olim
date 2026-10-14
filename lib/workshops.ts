@@ -6,7 +6,9 @@ export type Workshop = {
   titulo: string;
   palestrante: string;
   descricao: string;
+  // Sem valor, o check-in mostra "a definir". TODO: preencher sala e horário de todos.
   sala?: string;
+  horario?: string;
 };
 
 export const workshops: Workshop[] = [

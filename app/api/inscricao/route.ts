@@ -7,7 +7,9 @@ const STATUS: Record<string, number> = {
   NOME_INVALIDO: 400,
   EMAIL_INVALIDO: 400,
   WORKSHOP_INEXISTENTE: 400,
-  FORA_DO_SYMPLA: 403,
+  FORA_DA_LISTA: 403,
+  INGRESSO_PENDENTE: 403,
+  EMAIL_COMPARTILHADO: 409,
   JA_INSCRITO: 409,
   LOTADO: 409,
   OCUPADO: 503,
@@ -25,9 +27,10 @@ export async function POST(request: Request) {
     return falha({ ok: false, codigo: "REQUISICAO_INVALIDA", mensagem: "Requisição inválida." });
   }
 
-  const { workshopId, nome, email } = (corpo ?? {}) as Record<string, unknown>;
+  const { workshopId, codigo, nome, email } = (corpo ?? {}) as Record<string, unknown>;
   const entrada = {
     workshopId: String(workshopId ?? "").trim(),
+    codigo: String(codigo ?? "").trim().toUpperCase() || undefined,
     nome: String(nome ?? "").trim().replace(/\s+/g, " "),
     email: String(email ?? "").trim().toLowerCase(),
   };
@@ -35,11 +38,18 @@ export async function POST(request: Request) {
   if (!workshops.some((w) => w.id === entrada.workshopId)) {
     return falha({ ok: false, codigo: "WORKSHOP_INEXISTENTE", mensagem: "Workshop não encontrado." });
   }
-  if (entrada.nome.length < 3 || entrada.nome.length > 120) {
-    return falha({ ok: false, codigo: "NOME_INVALIDO", mensagem: "Informe seu nome completo." });
-  }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(entrada.email) || entrada.email.length > 254) {
-    return falha({ ok: false, codigo: "EMAIL_INVALIDO", mensagem: "Informe um e-mail válido." });
+  if (entrada.codigo) {
+    // Com código do ingresso, nome e e-mail vêm da planilha; os do formulário são ignorados.
+    if (!/^[A-Z0-9-]{4,40}$/.test(entrada.codigo)) {
+      return falha({ ok: false, codigo: "FORA_DA_LISTA", mensagem: "Link de convite inválido. Confira o link recebido." });
+    }
+  } else {
+    if (entrada.nome.length < 3 || entrada.nome.length > 120) {
+      return falha({ ok: false, codigo: "NOME_INVALIDO", mensagem: "Informe seu nome completo." });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(entrada.email) || entrada.email.length > 254) {
+      return falha({ ok: false, codigo: "EMAIL_INVALIDO", mensagem: "Informe um e-mail válido." });
+    }
   }
 
   try {

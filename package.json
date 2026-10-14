@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "gas:push": "clasp -u olim push --force",
+    "gas:deploy": "clasp -u olim push --force && clasp -u olim create-deployment -i AKfycbyFT17pblhT58PCgJpqtvl9C3JlvmSUkBGSedIErxPJEKA72kpaQyrl1M1-thFEcw5M -d \"$(git rev-parse --short HEAD)\"",
+    "gas:open": "clasp -u olim open-container"
   },
   "dependencies": {
     "next": "16.4.0",
@@ -15,6 +18,7 @@
     "server-only": "^0.0.1"
   },
   "devDependencies": {
+    "@google/clasp": "^3.4.1",
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

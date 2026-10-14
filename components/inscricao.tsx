@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
-import type { RespostaInscricao, Vaga } from "@/lib/tipos";
+import type { Participante, RespostaInscricao, Vaga } from "@/lib/tipos";
 import { workshops } from "@/lib/workshops";
 
 const INTERVALO_MS = 15_000;
@@ -12,32 +12,32 @@ type Envio =
   | { estado: "enviando" }
   | { estado: "erro"; mensagem: string }
   | { estado: "sucesso"; workshopId: string; nome: string }
-  // O e-mail do convite já tinha inscrição quando a página abriu.
+  // O participante do convite já tinha escolhido quando a página abriu.
   | { estado: "ja-inscrito"; workshopId: string };
 
 type Props = {
   initialVagas: Vaga[] | null;
-  // Vindos do link de convite. O e-mail do link fica travado para não ser digitado errado.
-  nomeInicial?: string;
-  emailInicial?: string;
-  jaInscritoEm?: string;
-  // Fallback do Suspense: trava a interação até o e-mail do link e as vagas chegarem,
+  // Participante do link de convite (/?c=CODIGO): nome e e-mail vêm da planilha, travados.
+  convite?: Participante;
+  // O link tinha um código que não está na lista.
+  conviteInvalido?: boolean;
+  // Fallback do Suspense: trava a interação até o convite e as vagas chegarem,
   // senão o que a pessoa digitar se perde quando o componente definitivo entra.
   carregando?: boolean;
 };
 
 export default function Inscricao({
   initialVagas,
-  nomeInicial = "",
-  emailInicial = "",
-  jaInscritoEm,
+  convite,
+  conviteInvalido = false,
   carregando = false,
 }: Props) {
   const [vagas, setVagas] = useState(initialVagas);
+  const jaInscritoEm = convite?.workshopId ?? undefined;
   const [selecionado, setSelecionado] = useState<string | null>(jaInscritoEm ?? null);
-  const [nome, setNome] = useState(nomeInicial);
-  const [email, setEmail] = useState(emailInicial);
-  const emailTravado = emailInicial !== "";
+  const [nome, setNome] = useState(convite?.nome ?? "");
+  const [email, setEmail] = useState(convite?.email ?? "");
+  const travado = convite !== undefined;
   const [envio, setEnvio] = useState<Envio>(
     jaInscritoEm ? { estado: "ja-inscrito", workshopId: jaInscritoEm } : { estado: "ocioso" },
   );
@@ -89,7 +89,7 @@ export default function Inscricao({
       const res = await fetch("/api/inscricao", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workshopId: selecionado, nome, email }),
+        body: JSON.stringify({ workshopId: selecionado, codigo: convite?.codigo, nome, email }),
       });
       const dados = (await res.json()) as RespostaInscricao;
       if (dados.vagas) setVagas(dados.vagas);
@@ -120,12 +120,14 @@ export default function Inscricao({
         >
           <p className="eyebrow text-roxo-300">Inscrição já garantida</p>
           <h3 className="font-display mt-1 text-2xl font-semibold">
-            {nomeInicial ? `Olá, ${nomeInicial.split(" ")[0]}!` : "Olá!"}
+            {convite?.nome ? `Olá, ${convite.nome.split(" ")[0]}!` : "Olá!"}
           </h3>
           <p className="mt-3 max-w-2xl text-branco/80">
-            O e-mail <strong className="text-branco">{emailInicial}</strong> já tem lugar garantido no workshop{" "}
-            <strong className="text-branco">{workshops.find((w) => w.id === envio.workshopId)?.titulo}</strong>. Cada pessoa
-            participa de um workshop só. Nos vemos em 07 de novembro, no Auditório do CEJAS.
+            Seu lugar já está garantido no workshop{" "}
+            <strong className="text-branco">
+              {workshops.find((w) => w.id === envio.workshopId)?.titulo ?? "escolhido anteriormente"}
+            </strong>
+            . Cada pessoa participa de um workshop só. Nos vemos em 07 de novembro, no Auditório do CEJAS.
           </p>
         </div>
       )}
@@ -221,9 +223,17 @@ export default function Inscricao({
             {escolhido ? `Workshop escolhido: ${escolhido.titulo}` : "Selecione um workshop acima para continuar"}
           </h3>
 
+          {conviteInvalido && (
+            <p role="alert" className="mt-4 rounded-xl bg-lilas px-4 py-3 text-sm font-semibold text-roxo-900">
+              Não encontramos o seu link de convite. Confira o link recebido ou preencha seus dados abaixo.
+            </p>
+          )}
+
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <label className="block">
-              <span className="mb-1.5 block text-sm font-semibold text-tinta">Nome completo</span>
+              <span className="mb-1.5 block text-sm font-semibold text-tinta">
+                {travado ? "Nome do seu ingresso" : "Nome completo"}
+              </span>
               <input
                 type="text"
                 name="nome"
@@ -233,14 +243,16 @@ export default function Inscricao({
                 placeholder="Seu nome"
                 autoComplete="name"
                 disabled={carregando}
+                readOnly={travado}
+                aria-describedby={travado ? "dados-travados" : undefined}
                 value={nome}
                 onChange={(e) => setNome(e.target.value)}
-                className="w-full rounded-xl border border-roxo-200 bg-papel px-4 py-3 text-tinta outline-none transition focus:border-roxo focus:ring-2 focus:ring-roxo/25"
+                className={classeCampo(travado)}
               />
             </label>
             <label className="block">
               <span className="mb-1.5 block text-sm font-semibold text-tinta">
-                {emailTravado ? "E-mail do seu convite" : "E-mail (o mesmo da inscrição no Sympla)"}
+                {travado ? "E-mail do seu ingresso" : "E-mail (o mesmo da inscrição no Sympla)"}
               </span>
               <input
                 type="email"
@@ -250,24 +262,19 @@ export default function Inscricao({
                 placeholder="voce@email.com"
                 autoComplete="email"
                 disabled={carregando}
-                readOnly={emailTravado}
-                aria-describedby={emailTravado ? "email-travado" : undefined}
+                readOnly={travado}
+                aria-describedby={travado ? "dados-travados" : undefined}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className={[
-                  "w-full rounded-xl border px-4 py-3 outline-none transition",
-                  emailTravado
-                    ? "cursor-not-allowed border-roxo-200 bg-lilas text-tinta/70"
-                    : "border-roxo-200 bg-papel text-tinta focus:border-roxo focus:ring-2 focus:ring-roxo/25",
-                ].join(" ")}
+                className={classeCampo(travado)}
               />
-              {emailTravado && (
-                <span id="email-travado" className="mt-1.5 block text-xs text-tinta/60">
-                  Veio do seu convite e não pode ser alterado.
-                </span>
-              )}
             </label>
           </div>
+          {travado && (
+            <p id="dados-travados" className="mt-2 text-xs text-tinta/60">
+              Dados do seu ingresso no Sympla. Algo errado? Fale com a organização.
+            </p>
+          )}
 
           {escolhidoLotado && (
             <p role="alert" className="mt-4 text-sm font-semibold text-roxo-700">
@@ -291,4 +298,13 @@ export default function Inscricao({
       )}
     </section>
   );
+}
+
+function classeCampo(travado: boolean) {
+  return [
+    "w-full rounded-xl border border-roxo-200 px-4 py-3 outline-none transition",
+    travado
+      ? "cursor-not-allowed bg-lilas text-tinta/70"
+      : "bg-papel text-tinta focus:border-roxo focus:ring-2 focus:ring-roxo/25",
+  ].join(" ");
 }
