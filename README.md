@@ -96,9 +96,9 @@ Sem `APPS_SCRIPT_URL`, o `npm run dev` usa vagas simuladas em memória. Em produ
 1. Importe o repositório na Vercel (o preset Next.js é detectado sozinho).
 2. Em **Settings › Environment Variables**, cadastre `APPS_SCRIPT_URL` e `APPS_SCRIPT_TOKEN`
    (Production e Preview) e faça o redeploy.
-3. Em **Settings › Domains**, adicione `seminario.bluebrick.com.br` e aponte o DNS como a Vercel indicar.
+3. Em **Settings › Domains**, adicione `seminario.escolaolim.com.br` e aponte o DNS como a Vercel indicar.
 
-Na planilha, `SITE_URL` deve ser `https://seminario.bluebrick.com.br`.
+Na planilha, `SITE_URL` deve ser `https://seminario.escolaolim.com.br`.
 
 ## Pendências de conteúdo
 
